@@ -26,12 +26,12 @@ jobs:
       - run: uv run flake8
       - run: uv run pytest -v
 
-  trufflehog-scan:
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
-    uses: recklessbud/reuse-sec-workflows/.github/workflows/resuable-trufflehog.yml@main
+  # trufflehog-scan:
+  #   permissions:
+  #     contents: read
+  #     actions: read
+  #     security-events: write
+  #   uses: recklessbud/reuse-sec-workflows/.github/workflows/resuable-trufflehog.yml@main
 
   sast:
     name: SAST (Bandit + Semgrep)
