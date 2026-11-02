@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.env
+.env.*
+tests
+terraform
+k8s
+docs
+.secrets.baseline
