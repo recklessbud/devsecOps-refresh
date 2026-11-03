@@ -33,6 +33,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+RUN pip uninstall -y setuptools pip wheel 2>/dev/null || true
+
 USER 10001
 
 EXPOSE 8000
