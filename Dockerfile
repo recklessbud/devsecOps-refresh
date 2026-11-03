@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- builder: resolve and install deps ----
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.15-slim-bookworm AS builder
 
 # Pin uv to the version you have locally (`uv --version`)
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
@@ -18,7 +18,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # ---- runtime: only what's needed to run ----
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.15-slim-bookworm AS runtime
 
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app \
