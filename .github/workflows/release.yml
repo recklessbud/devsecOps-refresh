@@ -11,7 +11,6 @@ permissions:
 
 env:
     REGISTRY: ghcr.io
-    IMAGE: ghcr.io/${{github.repository}}
 
 
 jobs:
@@ -38,6 +37,10 @@ jobs:
             username: ${{github.actor}}
             password: ${{secrets.GITHUB_TOKEN}}
 
+        - name: Normalize image name
+          id: image-name
+          run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
         - name: Build and push
           id: build
           uses: docker/build-push-action@v6
@@ -45,30 +48,30 @@ jobs:
             context: .
             push: true
             pull: true
-            tags: ${{env.IMAGE}}:${{github.event.workflow_run.head_sha}}
+            tags: ${{ steps.image-name.outputs.image }}:${{ github.event.workflow_run.head_sha }}
             provenance: mode=max
             sbom: true
 
         - uses: sigstore/cosign-installer@v3
         - name: Sign image(keyless)
-          run: cosign sign --yes ${{env.IMAGE}}@${{steps.build.outputs.digest}}
+          run: cosign sign --yes ${{ steps.image-name.outputs.image }}@${{steps.build.outputs.digest}}
 
 
         - name: Generate SBOM (cyclonDX)
           uses: anchore/sbom-action@v0
           with:
-            image: ${{env.IMAGE}}@${{steps.build.outputs.digest}}
+            image: ${{ steps.image-name.outputs.image }}@${{steps.build.outputs.digest}}
             format: cyclonedx-json
             output-file: sbom.cdx.json
             upload-artifact: true
 
         - name: Arrach SBOM as signed attestation
           run: >
-            cosign attest --yes --type cyclonedx --predicate sbom.cdx.json ${{env.IMAGE}}@${{steps.build.outputs.digest}}
+            cosign attest --yes --type cyclonedx --predicate sbom.cdx.json ${{ steps.image-name.outputs.image }}@${{steps.build.outputs.digest}}
 
         - name: Verify signature
           run: >
             cosign verify
             --certificate-identity-regexp "^https://github.com/${{ github.repository }}/"
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
-            ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+            ${{ steps.image-name.outputs.image }}@${{ steps.build.outputs.digest }}
