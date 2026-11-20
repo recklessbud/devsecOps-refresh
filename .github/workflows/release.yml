@@ -45,7 +45,7 @@ jobs:
             context: .
             push: true
             pull: true
-            tags: ${{env.IMAGE}}:-${{github.event.workflow_run.head_sha}}
+            tags: ${{env.IMAGE}}:${{github.event.workflow_run.head_sha}}
             provenance: mode=max
             sbom: true
 
