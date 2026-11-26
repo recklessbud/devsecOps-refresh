@@ -1,0 +1,42 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verified-signed-images
+spec:
+  validationFailureAction: Enforce
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: verify-cosign-keyless
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["sdp"]
+
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/recklessbud/devsecops-refresh*"
+          required: true
+          verifyDigest: true
+          mutateDigest: true
+          attestors:
+            - entries:
+              - keyless:
+                  issuer: "https://token.actions.githubusercontent.com"
+                  subjectRegExp: "^https://github.com/recklessbud/devsecOps-refresh/.*"
+                  rekor:
+                    url: "https://rekor.sigstore.dev"
+    - name: only-the-registry
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+              namespaces: ["sdp"]
+
+      validate:
+        message: "Images must come from ghcr.io/recklessbud/devsecops-refresh."
+        pattern:
+          spec:
+            containers:
+              - image: "ghcr.io/recklessbud/devsecops-refresh*"

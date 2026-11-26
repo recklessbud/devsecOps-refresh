@@ -1,1 +1,10 @@
+# advance stuff--rejects the pod if its not hardend
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: sdp
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

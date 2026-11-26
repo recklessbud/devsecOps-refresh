@@ -1,0 +1,157 @@
+name: cluster-test
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  IMAGE: ghcr.io/recklessbud/devsecops-refresh
+  KYVERNO_CHART_VERSION: "3.9.2"
+  KIND_NODE_IMAGE: "kindest/node:v1.37.0"
+
+jobs:
+  e2e:
+    name: kind + Kyverno + ZAP
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve image digest
+        id: img
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.workflow_run.head_sha || github.sha }}"
+          DIGEST=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{.Manifest.Digest}}')
+          echo "ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Testing $IMAGE@$DIGEST"
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: sdp
+          node_image: ${{ env.KIND_NODE_IMAGE }}
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install Kyverno
+        run: |
+          helm repo add kyverno https://kyverno.github.io/kyverno/
+          helm repo update
+          helm install kyverno kyverno/kyverno \
+            --namespace kyverno --create-namespace \
+            --version "$KYVERNO_CHART_VERSION" \
+            --wait --timeout 5m
+
+      - name: Apply namespace and policy
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/kyverno-verify-images.yaml
+          kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s
+
+      - name: Deploy app (pinned to the released digest)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/k8s"
+          cp k8s/*.yaml "$RUNNER_TEMP/k8s/"
+          # Substitute only the image line
+          sed -i "s#image: ghcr.io/recklessbud/devsecops-refresh@sha256:.*#image: ${{ steps.img.outputs.ref }}#" \
+            "$RUNNER_TEMP/k8s/deployment.yaml"
+          kubectl apply -f "$RUNNER_TEMP/k8s/deployment.yaml" -f "$RUNNER_TEMP/k8s/service.yaml" \
+            -f "$RUNNER_TEMP/k8s/networkpolicy.yaml"
+          kubectl -n sdp rollout status deploy/sdp --timeout=180s
+
+      - name: "Gate 1: unknown registry must be rejected"
+        run: |
+          if out=$(kubectl apply -f k8s/tests/rogue-pod.yaml 2>&1); then
+            echo "::error::rogue pod was ADMITTED"; exit 1
+          fi
+          echo "$out"
+          echo "$out" | grep -q "only-the-registry" \
+            || { echo "::error::blocked, but not by the registry rule"; exit 1; }
+
+      - name: "Gate 2: wrong signing identity must be rejected"
+        run: |
+          set -euo pipefail
+          # Swap in a policy that trusts a different identity
+          sed 's#recklessbud/devsecOps-refresh/\.\*#someone-else/not-us/.*#' \
+            k8s/kyverno-verify-images.yaml | kubectl apply -f -
+          kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s
+          sleep 10
+
+          cat > "$RUNNER_TEMP/canary.yaml" <<EOF
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: canary
+            namespace: sdp
+          spec:
+            automountServiceAccountToken: false
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 10001
+              seccompProfile:
+                type: RuntimeDefault
+            containers:
+              - name: canary
+                image: ${{ steps.img.outputs.ref }}
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+          EOF
+
+          if out=$(kubectl apply -f "$RUNNER_TEMP/canary.yaml" 2>&1); then
+            echo "::error::image with wrong identity was ADMITTED (signature check not enforcing)"; exit 1
+          fi
+          echo "$out"
+          if echo "$out" | grep -q "only-the-registry"; then
+            echo "::error::rejected by the wrong rule"; exit 1
+          fi
+
+          # Positive control: restore the real policy, the same pod must now be admitted
+          kubectl apply -f k8s/kyverno-verify-images.yaml
+          kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s
+          sleep 10
+          kubectl apply -f "$RUNNER_TEMP/canary.yaml"
+          kubectl -n sdp delete pod canary --wait=false
+
+      - name: ZAP baseline scan
+        run: |
+          set -uo pipefail
+          kubectl -n sdp port-forward svc/sdp 8080:80 >/dev/null 2>&1 &
+          sleep 5
+          curl -fsS localhost:8080/health
+
+          mkdir -p zap-out && chmod 777 zap-out
+          docker run --rm --network host -v "$PWD/zap-out:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:8080 -r zap-report.html
+          code=$?
+          echo "ZAP exit code: $code"
+          # 0 = clean, 1 = FAIL-level alerts, 2 = warnings only
+          if [ "$code" -eq 1 ]; then exit 1; fi
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap-out/
+          if-no-files-found: ignore
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods -A
+          kubectl -n sdp get events --sort-by=.lastTimestamp | tail -20
+          kubectl -n kyverno logs deploy/kyverno-admission-controller --tail=50
