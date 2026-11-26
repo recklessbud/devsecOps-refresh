@@ -156,7 +156,7 @@ jobs:
           mkdir -p zap-out && chmod 777 zap-out
           docker run --rm --network host -v "$PWD/zap-out:/zap/wrk:rw" \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:8080 -r zap-report.html
+            zap-baseline.py -I -t http://localhost:8080 -r zap-report.html
           code=$?
           echo "ZAP exit code: $code"
           # 0 = clean, 1 = FAIL-level alerts, 2 = warnings only
