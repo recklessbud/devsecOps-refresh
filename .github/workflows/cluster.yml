@@ -15,6 +15,7 @@ env:
   IMAGE: ghcr.io/recklessbud/devsecops-refresh
   KYVERNO_CHART_VERSION: "3.9.2"
   KIND_NODE_IMAGE: "kindest/node:v1.37.0"
+  KIND_VERSION: "v0.34.0"
 
 jobs:
   e2e:
