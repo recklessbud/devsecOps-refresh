@@ -74,25 +74,25 @@ jobs:
 
       - name: Apply namespace and policy
         run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/kyverno-verify-images.yaml
+          kubectl apply -f k8s/namespace.yml
+          kubectl apply -f k8s/kyverno-verify-images.yml
           kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s
 
       - name: Deploy app (pinned to the released digest)
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/k8s"
-          cp k8s/*.yaml "$RUNNER_TEMP/k8s/"
+          cp k8s/*.yml "$RUNNER_TEMP/k8s/"
           # Substitute only the image line
           sed -i "s#image: ghcr.io/recklessbud/devsecops-refresh@sha256:.*#image: ${{ steps.img.outputs.ref }}#" \
-            "$RUNNER_TEMP/k8s/deployment.yaml"
-          kubectl apply -f "$RUNNER_TEMP/k8s/deployment.yaml" -f "$RUNNER_TEMP/k8s/service.yaml" \
-            -f "$RUNNER_TEMP/k8s/networkpolicy.yaml"
+            "$RUNNER_TEMP/k8s/deployment.yml"
+          kubectl apply -f "$RUNNER_TEMP/k8s/deployment.yml" -f "$RUNNER_TEMP/k8s/service.yml" \
+            -f "$RUNNER_TEMP/k8s/networkpolicy.yml"
           kubectl -n sdp rollout status deploy/sdp --timeout=180s
 
       - name: "Gate 1: unknown registry must be rejected"
         run: |
-          if out=$(kubectl apply -f k8s/tests/rogue-pod.yaml 2>&1); then
+          if out=$(kubectl apply -f k8s/tests/rogue-pod.yml 2>&1); then
             echo "::error::rogue pod was ADMITTED"; exit 1
           fi
           echo "$out"
@@ -104,11 +104,11 @@ jobs:
           set -euo pipefail
           # Swap in a policy that trusts a different identity
           sed 's#recklessbud/devsecOps-refresh/\.\*#someone-else/not-us/.*#' \
-            k8s/kyverno-verify-images.yaml | kubectl apply -f -
+            k8s/kyverno-verify-images.yml | kubectl apply -f -
           kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s
           sleep 10
 
-          cat > "$RUNNER_TEMP/canary.yaml" <<EOF
+          cat > "$RUNNER_TEMP/canary.yml" <<EOF
           apiVersion: v1
           kind: Pod
           metadata:
@@ -131,7 +131,7 @@ jobs:
                     drop: ["ALL"]
           EOF
 
-          if out=$(kubectl apply -f "$RUNNER_TEMP/canary.yaml" 2>&1); then
+          if out=$(kubectl apply -f "$RUNNER_TEMP/canary.yml" 2>&1); then
             echo "::error::image with wrong identity was ADMITTED (signature check not enforcing)"; exit 1
           fi
           echo "$out"
@@ -140,10 +140,10 @@ jobs:
           fi
 
           # Positive control: restore the real policy, the same pod must now be admitted
-          kubectl apply -f k8s/kyverno-verify-images.yaml
+          kubectl apply -f k8s/kyverno-verify-images.yml
           kubectl wait --for=condition=Ready clusterpolicy --all --timeout=120s
           sleep 10
-          kubectl apply -f "$RUNNER_TEMP/canary.yaml"
+          kubectl apply -f "$RUNNER_TEMP/canary.yml"
           kubectl -n sdp delete pod canary --wait=false
 
       - name: ZAP baseline scan
