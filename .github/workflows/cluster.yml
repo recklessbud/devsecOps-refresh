@@ -36,7 +36,7 @@ jobs:
           echo "ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Testing $IMAGE@$DIGEST"
 
-      - uses: helm/kind-action@v1
+      - uses: helm/kind-action@v1.13.0
         with:
           cluster_name: sdp
           node_image: ${{ env.KIND_NODE_IMAGE }}
