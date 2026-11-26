@@ -36,11 +36,30 @@ jobs:
           echo "ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Testing $IMAGE@$DIGEST"
 
-      - uses: helm/kind-action@v1
-        with:
-          cluster_name: sdp
-          node_image: ${{ env.KIND_NODE_IMAGE }}
-          version: ${{ env.KIND_VERSION }}
+      - name: Install kind
+        run: |
+          set -euo pipefail
+          curl -sSfLo kind \
+            "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+          kind version
+
+
+
+      - name: Create kind cluster
+        run: |
+          kind create cluster --name sdp \
+            --image "$KIND_NODE_IMAGE" \
+            --wait 120s
+          kubectl cluster-info --context kind-sdp
+
+
+    #   - uses: helm/kind-action@v1
+    #     with:
+    #       cluster_name: sdp
+    #       node_image: ${{ env.KIND_NODE_IMAGE }}
+    #       version: ${{ env.KIND_VERSION }}
 
       - uses: azure/setup-helm@v4
 
