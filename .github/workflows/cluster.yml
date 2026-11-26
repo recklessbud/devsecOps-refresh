@@ -15,7 +15,7 @@ env:
   IMAGE: ghcr.io/recklessbud/devsecops-refresh
   KYVERNO_CHART_VERSION: "3.9.2"
   KIND_NODE_IMAGE: "kindest/node:v1.37.0"
-  KIND_VERSION: "v0.34.0"
+  KIND_VERSION: "v0.30.0"
 
 jobs:
   e2e:
@@ -36,7 +36,7 @@ jobs:
           echo "ref=$IMAGE@$DIGEST" >> "$GITHUB_OUTPUT"
           echo "Testing $IMAGE@$DIGEST"
 
-      - uses: helm/kind-action@v1.13.0
+      - uses: helm/kind-action@v1
         with:
           cluster_name: sdp
           node_image: ${{ env.KIND_NODE_IMAGE }}
