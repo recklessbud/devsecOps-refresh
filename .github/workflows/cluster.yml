@@ -40,6 +40,7 @@ jobs:
         with:
           cluster_name: sdp
           node_image: ${{ env.KIND_NODE_IMAGE }}
+          version: ${{ env.KIND_VERSION }}
 
       - uses: azure/setup-helm@v4
 
