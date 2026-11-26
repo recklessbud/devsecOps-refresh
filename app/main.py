@@ -20,6 +20,15 @@ async def security_headers(request: Request, call_next):
     return response
 
 
+
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    return '<a href="/health">health</a><a href="/items/1">sample item</a>'
+
+
+    
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
